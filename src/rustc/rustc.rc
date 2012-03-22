@@ -13,6 +13,8 @@ use std (name = "std",
          vers = "0.2",
          url = "http://rust-lang.org/src/std");
 
+use rustsyntax;
+
 mod middle {
     mod trans {
         mod common;
