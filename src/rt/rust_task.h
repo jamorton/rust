@@ -143,6 +143,10 @@ rust_task : public kernel_owned<rust_task>, rust_cond
     // The amount of stack we're using, excluding red zones
     size_t total_stack_sz;
 
+    // linked list of running tasks on rust_task_thead
+    rust_task * thread_next;
+    rust_task * thread_prev;
+    
 private:
 
     // Protects state, cond, cond_name

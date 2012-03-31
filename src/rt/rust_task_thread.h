@@ -73,8 +73,6 @@ public:
     size_t min_stack_size;
     rust_env *env;
 
-    randctx rctx;
-
     int32_t list_index;
     const char *const name;
 

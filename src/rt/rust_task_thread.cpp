@@ -37,7 +37,6 @@ rust_task_thread::rust_task_thread(rust_scheduler *sched,
     name("main")
 {
     LOGPTR(this, "new dom", (uintptr_t)this);
-    isaac_init(kernel, &rctx);
 
     if (!tls_initialized)
         init_tls();
