@@ -19,8 +19,6 @@ enum rust_task_state {
     task_state_dead
 };
 
-typedef indexed_list<rust_task> rust_task_list;
-
 struct rust_task_thread : public kernel_owned<rust_task_thread>,
                         rust_thread
 {
@@ -47,14 +45,16 @@ private:
     stk_seg *cached_c_stack;
     stk_seg *extra_c_stack;
 
-    rust_task_list running_tasks;
-    rust_task_list blocked_tasks;
+    rust_task *running_tasks;
+    rust_task *blocked_tasks;
+    size_t num_running_tasks;
+    size_t num_blocked_tasks;
+    
     rust_task *dead_task;
 
     void prepare_c_stack(rust_task *task);
     void unprepare_c_stack();
 
-    rust_task_list *state_list(rust_task_state state);
     const char *state_name(rust_task_state state);
 
 public:

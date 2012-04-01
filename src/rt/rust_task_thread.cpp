@@ -26,6 +26,11 @@ rust_task_thread::rust_task_thread(rust_scheduler *sched,
     id(id),
     should_exit(false),
     cached_c_stack(NULL),
+    extra_c_stack(NULL),
+    running_tasks(NULL),
+    blocked_tasks(NULL),
+    num_running_tasks(0),
+    num_blocked_tasks(0),
     dead_task(NULL),
     kernel(sched->kernel),
     sched(sched),
@@ -74,33 +79,27 @@ rust_task_thread::fail() {
 
 void
 rust_task_thread::kill_all_tasks() {
-    std::vector<rust_task*> all_tasks;
-
-    {
-        scoped_lock with(lock);
-
-        for (size_t i = 0; i < running_tasks.length(); i++) {
-            all_tasks.push_back(running_tasks[i]);
-        }
-
-        for (size_t i = 0; i < blocked_tasks.length(); i++) {
-            all_tasks.push_back(blocked_tasks[i]);
-        }
-    }
-
-    while (!all_tasks.empty()) {
-        rust_task *task = all_tasks.back();
-        all_tasks.pop_back();
+    rust_task *task = running_tasks;
+    while (true) {
+        if (task == NULL)
+            break;
+        
         // We don't want the failure of these tasks to propagate back
         // to the kernel again since we're already failing everything
         task->unsupervise();
         task->kill();
+
+        task = task->thread_next;
+        if (task == running_tasks)
+            task = blocked_tasks;
+        else if (task == blocked_tasks)
+            break;
     }
 }
 
 size_t
 rust_task_thread::number_of_live_tasks() {
-    return running_tasks.length() + blocked_tasks.length();
+    return num_running_tasks + num_blocked_tasks;
 }
 
 /**
@@ -148,41 +147,42 @@ rust_task_thread::schedule_task() {
     I(this, this);
     // FIXME: in the face of failing tasks, this is not always right.
     // I(this, n_live_tasks() > 0);
-    if (running_tasks.length() > 0) {
-        size_t k = isaac_rand(&rctx);
-        // Look around for a runnable task, starting at k.
-        for(size_t j = 0; j < running_tasks.length(); ++j) {
-            size_t  i = (j + k) % running_tasks.length();
-            return (rust_task *)running_tasks[i];
-        }
-    }
-    return NULL;
+    if (running_tasks == NULL)
+        return NULL;
+
+    // move linked list head one over, effectively making it a queue
+    rust_task * ret = running_tasks;
+    running_tasks = running_tasks->thread_next;
+    return ret;
 }
 
 void
 rust_task_thread::log_state() {
     if (log_rt_task < log_debug) return;
 
-    if (!running_tasks.is_empty()) {
+    if (running_tasks != NULL) {
         log(NULL, log_debug, "running tasks:");
-        for (size_t i = 0; i < running_tasks.length(); i++) {
+        rust_task *task = running_tasks;
+        do {
             log(NULL, log_debug, "\t task: %s @0x%" PRIxPTR,
-                running_tasks[i]->name,
-                running_tasks[i]);
-        }
+                task->name,
+                task);
+        } while ((task = task->thread_next) != running_tasks);
     }
 
-    if (!blocked_tasks.is_empty()) {
+    if (blocked_tasks != NULL) {
         log(NULL, log_debug, "blocked tasks:");
-        for (size_t i = 0; i < blocked_tasks.length(); i++) {
+        rust_task *task = blocked_tasks;
+        do {
             log(NULL, log_debug, "\t task: %s @0x%" PRIxPTR ", blocked on: 0x%"
                 PRIxPTR " '%s'",
-                blocked_tasks[i]->name, blocked_tasks[i],
-                blocked_tasks[i]->get_cond(),
-                blocked_tasks[i]->get_cond_name());
-        }
+                task->name, task,
+                task->get_cond(),
+                task->get_cond_name());
+        } while((task = task->thread_next) != blocked_tasks);
     }
 }
+
 /**
  * Starts the main scheduler loop which performs task scheduling for this
  * domain.
@@ -242,8 +242,8 @@ rust_task_thread::start_main_loop() {
         reap_dead_tasks();
     }
 
-    A(this, running_tasks.is_empty(), "Should have no running tasks");
-    A(this, blocked_tasks.is_empty(), "Should have no blocked tasks");
+    A(this, running_tasks == NULL, "Should have no running tasks");
+    A(this, blocked_tasks == NULL, "Should have no blocked tasks");
     A(this, dead_task == NULL, "Should have no dead tasks");
 
     DLOG(this, dom, "finished main-loop %d", id);
@@ -268,18 +268,6 @@ rust_task_thread::create_task(rust_task *spawner, const char *name) {
 
     task->id = kernel->generate_task_id();
     return task;
-}
-
-rust_task_list *
-rust_task_thread::state_list(rust_task_state state) {
-    switch (state) {
-    case task_state_running:
-        return &running_tasks;
-    case task_state_blocked:
-        return &blocked_tasks;
-    default:
-        return NULL;
-    }
 }
 
 const char *
@@ -309,20 +297,28 @@ rust_task_thread::transition(rust_task *task,
          name, (uintptr_t)this, state_name(src), state_name(dst),
          state_name(task->get_state()));
     I(this, task->get_state() == src);
-    rust_task_list *src_list = state_list(src);
-    if (src_list) {
-        src_list->remove(task);
+
+    if (task->thread_next != NULL)
+    {
+        task->thread_prev->thread_next = task->thread_next;
+        task->thread_next->thread_prev = task->thread_prev;
+        task->thread_next = NULL;
+        task->thread_prev = NULL;
     }
-    rust_task_list *dst_list = state_list(dst);
-    if (dst_list) {
-        dst_list->append(task);
-    }
-    if (dst == task_state_dead) {
-        I(this, dead_task == NULL);
-        dead_task = task;
+
+    if (dst == task_state_running || dst == task_state_blocked)
+    {
+        rust_task *dst_list = running_tasks;
+        if (dst == task_state_blocked)
+            dst_list = blocked_tasks;
+
+        if (dst_list != NULL) {
+            dst_list->thread_prev->thread_next = task;
+            dst_list->thread_prev = task;
+        } else
+            dst_list = task;
     }
     task->set_state(dst, cond, cond_name);
-
     lock.signal();
 }
 
