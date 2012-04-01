@@ -12,12 +12,12 @@ rust_port_selector::select(rust_task *task, rust_port **dptr,
                            rust_port **ports,
                            size_t n_ports, uintptr_t *yield) {
 
-    I(task->thread, this->ports == NULL);
-    I(task->thread, this->n_ports == 0);
-    I(task->thread, dptr != NULL);
-    I(task->thread, ports != NULL);
-    I(task->thread, n_ports != 0);
-    I(task->thread, yield != NULL);
+    I(task->sched_loop, this->ports == NULL);
+    I(task->sched_loop, this->n_ports == 0);
+    I(task->sched_loop, dptr != NULL);
+    I(task->sched_loop, ports != NULL);
+    I(task->sched_loop, n_ports != 0);
+    I(task->sched_loop, yield != NULL);
 
     *yield = false;
     size_t locks_taken = 0;
@@ -33,7 +33,7 @@ rust_port_selector::select(rust_task *task, rust_port **dptr,
     for (size_t i = 0; i < n_ports; i++) {
         size_t k = (i + j) % n_ports;
         rust_port *port = ports[k];
-        I(task->thread, port != NULL);
+        I(task->sched_loop, port != NULL);
 
         port->lock.lock();
         locks_taken++;
@@ -48,7 +48,7 @@ rust_port_selector::select(rust_task *task, rust_port **dptr,
     if (!found_msg) {
         this->ports = ports;
         this->n_ports = n_ports;
-        I(task->thread, task->rendezvous_ptr == NULL);
+        I(task->sched_loop, task->rendezvous_ptr == NULL);
         task->rendezvous_ptr = (uintptr_t*)dptr;
         task->block(this, "waiting for select rendezvous");
 
@@ -70,6 +70,8 @@ rust_port_selector::select(rust_task *task, rust_port **dptr,
 void
 rust_port_selector::msg_sent_on(rust_port *port) {
     rust_task *task = port->task;
+
+    port->lock.must_not_have_lock();
 
     // Prevent two ports from trying to wake up the task
     // simultaneously
