@@ -43,6 +43,7 @@ rust_task::rust_task(rust_task_thread *thread, rust_task_state state,
     c_stack(NULL),
     next_c_sp(0),
     next_rust_sp(0),
+    port_selector(kernel),
     supervisor(spawner)
 {
     LOGPTR(thread, "new task", (uintptr_t)this);
