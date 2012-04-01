@@ -74,7 +74,7 @@ rust_sched_loop::fail() {
 }
 
 void
-rust_task_thread::kill_all_tasks() {
+rust_sched_loop::kill_all_tasks() {
     rust_task_iterator it = running_tasks.iterator();
     while (it.hasNext()) {
         rust_task *task = it.next();
@@ -91,7 +91,7 @@ rust_task_thread::kill_all_tasks() {
 }
 
 size_t
-rust_task_thread::number_of_live_tasks() {
+rust_sched_loop::number_of_live_tasks() {
     return running_tasks.size() + blocked_tasks.size();
 }
 
@@ -278,7 +278,7 @@ rust_sched_loop::create_task(rust_task *spawner, const char *name) {
 }
 
 rust_task_queue *
-rust_task_thread::state_list(rust_task_state state) {
+rust_sched_loop::state_list(rust_task_state state) {
     switch (state) {
     case task_state_running:
         return &running_tasks;
