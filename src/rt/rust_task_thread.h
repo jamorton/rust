@@ -5,6 +5,7 @@
 #include "sync/rust_thread.h"
 #include "rust_stack.h"
 #include "context.h"
+#include "rust_task_queue.h"
 
 #ifndef _WIN32
 #include <pthread.h>
@@ -45,16 +46,15 @@ private:
     stk_seg *cached_c_stack;
     stk_seg *extra_c_stack;
 
-    rust_task *running_tasks;
-    rust_task *blocked_tasks;
-    size_t num_running_tasks;
-    size_t num_blocked_tasks;
+    rust_task_queue running_tasks;
+    rust_task_queue blocked_tasks;
     
     rust_task *dead_task;
 
     void prepare_c_stack(rust_task *task);
     void unprepare_c_stack();
 
+    rust_task_queue *state_list(rust_task_state state);
     const char *state_name(rust_task_state state);
 
 public:
