@@ -287,7 +287,7 @@ rust_task_thread::state_name(rust_task_state state) {
     }
 }
 
-void 
+void
 rust_task_thread::transition(rust_task *task,
                              rust_task_state src, rust_task_state dst,
                              rust_cond *cond, const char* cond_name) {
