@@ -304,13 +304,22 @@ rust_task_thread::transition(rust_task *task,
         task->thread_next->thread_prev = task->thread_prev;
         task->thread_next = NULL;
         task->thread_prev = NULL;
+        if (src == task_state_running)
+            num_running_tasks--;
+        else if (src == task_state_blocked)
+            num_blocked_tasks--;
     }
 
     if (dst == task_state_running || dst == task_state_blocked)
     {
-        rust_task *dst_list = running_tasks;
-        if (dst == task_state_blocked)
+        rust_task *dst_list;
+        if (dst == task_state_running) {
+            dst_list = running_tasks;
+            num_running_tasks++;
+        } else {
             dst_list = blocked_tasks;
+            num_blocked_tasks++;
+        }
 
         if (dst_list != NULL) {
             dst_list->thread_prev->thread_next = task;
