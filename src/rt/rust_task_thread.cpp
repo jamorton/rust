@@ -80,20 +80,19 @@ rust_task_thread::fail() {
 void
 rust_task_thread::kill_all_tasks() {
     rust_task *task = running_tasks;
-    while (true) {
-        if (task == NULL)
-            break;
-        
-        // We don't want the failure of these tasks to propagate back
-        // to the kernel again since we're already failing everything
-        task->unsupervise();
-        task->kill();
-
-        task = task->thread_next;
-        if (task == running_tasks)
-            task = blocked_tasks;
-        else if (task == blocked_tasks)
-            break;
+    if (task != NULL) {
+        do {
+            task->unsupervise();
+            task->kill();
+        } while ((task = task->thread_next) != NULL);
+    }
+    
+    task = blocked_tasks;
+    if (task != NULL) {
+        do {
+            task->unsupervise();
+            task->kill();
+        } while ((task = task->thread_next) != NULL);
     }
 }
 
